@@ -14,6 +14,9 @@
 #    4. Applies Cinnamon applet settings (Start button, ungrouped taskbar)
 #    5. Installs the USB drive-letter registration tool (usb-register)
 #    6. Downloads install-temp/ folder from this repo to the desktop
+#    7. Sets number of Cinnamon virtual desktops to 1
+#    8. Enables autologin for the current user
+#    9. Disables unnecessary default services
 # ==============================================================================
 set -e
 
@@ -297,19 +300,206 @@ else
 fi
 
 # ==============================================================================
+# 7. SET CINNAMON VIRTUAL DESKTOPS TO 1
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [7/9] Setting virtual desktops to 1..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Cinnamon stores workspace count in dconf
+# We set num-workspaces to 1 and also disable the workspace switcher OSD
+gsettings set org.cinnamon.desktop.wm.preferences num-workspaces 1
+gsettings set org.cinnamon number-workspaces 1
+
+echo "==> Virtual desktops set to 1."
+
+# ==============================================================================
+# 8. ENABLE AUTOLOGIN FOR CURRENT USER
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [8/9] Enabling autologin for $REAL_USER..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Linux Mint uses LightDM as display manager
+LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
+
+# Backup the original config
+sudo cp "$LIGHTDM_CONF" "${LIGHTDM_CONF}.bak"
+
+# Use Python to safely patch only the autologin lines under [Seat:*]
+sudo python3 - <<EOF
+import re
+
+path = "$LIGHTDM_CONF"
+with open(path, "r") as f:
+    content = f.read()
+
+# If autologin-user line exists, update it; otherwise add it under [Seat:*]
+if re.search(r'^#?autologin-user\s*=', content, re.MULTILINE):
+    content = re.sub(r'^#?autologin-user\s*=.*$',
+                     'autologin-user=$REAL_USER',
+                     content, flags=re.MULTILINE)
+else:
+    content = content.replace('[Seat:*]',
+                               '[Seat:*]\nautologin-user=$REAL_USER')
+
+# Also set autologin-user-timeout to 0 (no delay)
+if re.search(r'^#?autologin-user-timeout\s*=', content, re.MULTILINE):
+    content = re.sub(r'^#?autologin-user-timeout\s*=.*$',
+                     'autologin-user-timeout=0',
+                     content, flags=re.MULTILINE)
+else:
+    content = content.replace('autologin-user=$REAL_USER',
+                               'autologin-user=$REAL_USER\nautologin-user-timeout=0')
+
+with open(path, "w") as f:
+    f.write(content)
+
+print("   LightDM autologin configured.")
+EOF
+
+echo "==> Autologin enabled for: $REAL_USER"
+echo "    (Original config backed up to ${LIGHTDM_CONF}.bak)"
+
+# ==============================================================================
+# 9. DISABLE UNNECESSARY DEFAULT SERVICES
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [9/9] Disabling unnecessary services..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+disable_service_if_exists() {
+    local SVC="$1"
+    local REASON="$2"
+    if systemctl list-unit-files "$SVC" 2>/dev/null | grep -q "$SVC"; then
+        sudo systemctl stop "$SVC" 2>/dev/null || true
+        sudo systemctl disable "$SVC" 2>/dev/null || true
+        echo "  ✓ Disabled: $SVC  ($REASON)"
+    else
+        echo "  – Skipped:  $SVC  (not installed)"
+    fi
+}
+
+# ── Safe to disable for a desktop PC used by non-technical users ──────────────
+
+# Avahi: mDNS/zeroconf — useful for multi-device networks but unnecessary here
+disable_service_if_exists avahi-daemon.service        "mDNS/zeroconf, not needed on single PC"
+
+# ModemManager: manages mobile broadband (3G/4G) modems — no modem on this PC
+disable_service_if_exists ModemManager.service        "mobile broadband manager, no modem present"
+
+# cups-browsed: auto-discovers network printers — only needed if using network printers
+disable_service_if_exists cups-browsed.service        "network printer discovery, not needed"
+
+# whoopsie: Ubuntu crash reporter — sends crash data to Canonical
+disable_service_if_exists whoopsie.service            "crash reporter / telemetry to Canonical"
+
+# apport: Ubuntu crash handler — generates crash reports
+disable_service_if_exists apport.service              "crash report generator"
+
+# kerneloops: sends kernel oops reports online
+disable_service_if_exists kerneloops.service          "kernel oops reporter / telemetry"
+
+# wpa_supplicant: WiFi manager — disable only if using wired ethernet only
+# (commented out — kept enabled in case WiFi is used)
+# disable_service_if_exists wpa_supplicant.service    "WiFi - only disable if wired-only"
+
+# bluetooth: disable if no bluetooth devices are used
+# (commented out — uncomment if you don't use bluetooth)
+# disable_service_if_exists bluetooth.service         "Bluetooth - uncomment to disable"
+
+echo ""
+echo "==> Services cleanup done."
+
+# ==============================================================================
+# 10. DISABLE SCREENSAVER LOCK (no password on wake)
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [10/11] Disabling screensaver lock..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# Disable the lock screen entirely — no password needed after screensaver/idle
+gsettings set org.cinnamon.desktop.screensaver lock-enabled false
+
+# Also disable the screensaver itself (optional — comment out to keep screensaver
+# but just remove the password requirement)
+gsettings set org.cinnamon.desktop.screensaver idle-activation-enabled false
+
+# Prevent screen from locking when lid is closed or after idle (power settings)
+gsettings set org.cinnamon.settings-daemon.plugins.power idle-dim-time 0
+gsettings set org.cinnamon.settings-daemon.plugins.power lock-on-suspend false
+
+echo "==> Screensaver lock disabled — no password needed on wake."
+
+# ==============================================================================
+# 11. ENABLE NUMLOCK ON BOOT
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [11/11] Enabling NumLock on boot..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+# 1. Tell LightDM to enable NumLock before login
+sudo apt install -y numlockx
+
+LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
+
+# Add numlockx call to lightdm greeter setup script if not already there
+if ! grep -q "numlockx" "$LIGHTDM_CONF"; then
+    sudo python3 - <<EOF
+import re
+
+path = "$LIGHTDM_CONF"
+with open(path, "r") as f:
+    content = f.read()
+
+# Add greeter-setup-script under [Seat:*] if not already present
+if "greeter-setup-script" not in content:
+    content = content.replace(
+        "autologin-user=$REAL_USER",
+        "autologin-user=$REAL_USER\ngreeter-setup-script=/usr/bin/numlockx on"
+    )
+else:
+    content = re.sub(
+        r'^#?greeter-setup-script\s*=.*$',
+        'greeter-setup-script=/usr/bin/numlockx on',
+        content, flags=re.MULTILINE
+    )
+
+with open(path, "w") as f:
+    f.write(content)
+
+print("   LightDM NumLock configured.")
+EOF
+fi
+
+# 2. Also set it in Cinnamon so NumLock stays on after login
+gsettings set org.cinnamon.settings-daemon.peripherals.keyboard numlock-state "on"
+
+echo "==> NumLock will be on from boot."
+
+# ==============================================================================
 echo ""
 echo "=============================================="
 echo "   ✅  Setup complete!"
 echo ""
-echo "   User        : $REAL_USER"
-echo "   Wine        : $(wine --version)"
-echo "   Teams       : Installed (Flatpak)"
-echo "   TeamViewer  : Installed"
-echo "   Cinnamon    : Settings applied"
-echo "   USB tool    : /usr/local/bin/usb-register"
-echo "   install-temp: $DEST"
+echo "   User          : $REAL_USER"
+echo "   Wine          : $(wine --version)"
+echo "   Teams         : Installed (Flatpak)"
+echo "   TeamViewer    : Installed"
+echo "   Cinnamon      : Settings + 1 desktop applied"
+echo "   Autologin     : Enabled for $REAL_USER"
+echo "   Lock screen   : Disabled (no password on wake)"
+echo "   NumLock       : Enabled on boot"
+echo "   USB tool      : /usr/local/bin/usb-register"
+echo "   install-temp  : $DEST"
+echo "   Services      : Unnecessary ones disabled"
 echo "=============================================="
 echo ""
-echo "  ⚠  Log out and back in if Cinnamon didn't"
-echo "     reload automatically."
+echo "  ⚠  Please REBOOT for all changes to take"
+echo "     full effect."
 echo ""
