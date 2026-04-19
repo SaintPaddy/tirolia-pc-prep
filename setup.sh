@@ -39,16 +39,67 @@ if [ "$EUID" -eq 0 ]; then
   exit 1
 fi
 
-# Capture the real user and their home/desktop now, before any sudo calls
-REAL_USER="$USER"
-REAL_HOME="$HOME"
+# ==============================================================================
+# RESOLVE REAL USER — cross-checked three ways so case/typos can't cause issues
+# ==============================================================================
 
-# Find the desktop folder the right way (handles Dutch "Bureaublad" etc.)
+# Source 1: $USER environment variable
+ENV_USER="$USER"
+
+# Source 2: who am i — reads the actual logged-in user from the login record
+#           (more reliable than $USER which can be overridden)
+WHO_USER=$(who am i 2>/dev/null | awk '{print $1}' || echo "")
+
+# Source 3: the actual /home directory entry (what's physically on disk)
+# Pick the home dir that matches — handles Tirolia vs tirolia vs any name
+if [ -n "$WHO_USER" ] && [ -d "/home/$WHO_USER" ]; then
+    REAL_USER="$WHO_USER"
+elif [ -n "$ENV_USER" ] && [ -d "/home/$ENV_USER" ]; then
+    REAL_USER="$ENV_USER"
+else
+    # Last resort: find the non-system user with the lowest UID >= 1000
+    REAL_USER=$(getent passwd | awk -F: '$3>=1000 && $3<65534 {print $1}' | head -n1)
+fi
+
+# Verify we found a valid user with a real home directory
+REAL_HOME=$(getent passwd "$REAL_USER" | cut -d: -f6)
+
+if [ -z "$REAL_USER" ] || [ ! -d "$REAL_HOME" ]; then
+    echo ""
+    echo "  ❌  Could not reliably detect the current user!"
+    echo "      ENV_USER = $ENV_USER"
+    echo "      WHO_USER = $WHO_USER"
+    echo "  Please run the script while logged in as your normal desktop user."
+    exit 1
+fi
+
+# Warn if the three sources disagree (e.g. Tirolia vs tirolia)
+if [ -n "$WHO_USER" ] && [ "$WHO_USER" != "$ENV_USER" ]; then
+    echo ""
+    echo "  ⚠  WARNING: Username mismatch detected!"
+    echo "      \$USER says  : $ENV_USER"
+    echo "      'who am i'  : $WHO_USER"
+    echo "      Using       : $REAL_USER  (from login record)"
+    echo ""
+fi
+
+# Find the desktop folder (handles Dutch "Bureaublad", English "Desktop", etc.)
 if command -v xdg-user-dir >/dev/null 2>&1; then
     REAL_DESKTOP=$(xdg-user-dir DESKTOP)
 else
-    REAL_DESKTOP=$(grep '^XDG_DESKTOP_DIR' "$HOME/.config/user-dirs.dirs" \
-        | cut -d'"' -f2 | sed "s|\$HOME|$HOME|")
+    REAL_DESKTOP=$(grep '^XDG_DESKTOP_DIR' "$REAL_HOME/.config/user-dirs.dirs" \
+        | cut -d'"' -f2 | sed "s|\$HOME|$REAL_HOME|")
+fi
+
+# Final fallback for desktop path
+if [ -z "$REAL_DESKTOP" ] || [ ! -d "$REAL_DESKTOP" ]; then
+    # Try common names
+    for CANDIDATE in "$REAL_HOME/Desktop" "$REAL_HOME/Bureaublad" "$REAL_HOME/Bureau" "$REAL_HOME/Schreibtisch"; do
+        if [ -d "$CANDIDATE" ]; then
+            REAL_DESKTOP="$CANDIDATE"
+            break
+        fi
+    done
 fi
 
 echo ""
@@ -56,9 +107,11 @@ echo "=============================================="
 echo "   tirolia-pc-prep — Linux Mint Setup"
 echo "=============================================="
 echo ""
-echo "  Running as  : $REAL_USER"
-echo "  Home folder : $REAL_HOME"
-echo "  Desktop     : $REAL_DESKTOP"
+echo "  User (login record) : $WHO_USER"
+echo "  User (\$USER var)    : $ENV_USER"
+echo "  Using               : $REAL_USER"
+echo "  Home folder         : $REAL_HOME"
+echo "  Desktop             : $REAL_DESKTOP"
 echo ""
 
 # ── DETECT UBUNTU BASE ────────────────────────────────────────────────────────
