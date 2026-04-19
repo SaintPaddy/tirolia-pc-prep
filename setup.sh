@@ -427,7 +427,7 @@ gsettings set org.cinnamon.desktop.screensaver lock-enabled false
 
 # Also disable the screensaver itself (optional — comment out to keep screensaver
 # but just remove the password requirement)
-gsettings set org.cinnamon.desktop.screensaver idle-activation-enabled false
+#gsettings set org.cinnamon.desktop.screensaver idle-activation-enabled false
 
 # Prevent screen from locking when lid is closed or after idle (power settings)
 gsettings set org.cinnamon.settings-daemon.plugins.power idle-dim-time 0
