@@ -15,8 +15,11 @@
 #    5. Installs the USB drive-letter registration tool (usb-register)
 #    6. Downloads install-temp/ folder from this repo to the desktop
 #    7. Sets number of Cinnamon virtual desktops to 1
-#    8. Enables autologin for the current user
-#    9. Disables unnecessary default services
+#    8. Applies Nemo context menu settings
+#    9. Enables autologin for the current user
+#   10. Disables unnecessary default services
+#   11. Disables screensaver lock
+#   12. Enables NumLock on boot
 # ==============================================================================
 set -e
 
@@ -368,11 +371,48 @@ gsettings set org.cinnamon number-workspaces 1
 echo "==> Virtual desktops set to 1."
 
 # ==============================================================================
-# 8. ENABLE AUTOLOGIN FOR CURRENT USER
+# 8. NEMO CONTEXT MENU SETTINGS
 # ==============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " [8/9] Enabling autologin for $REAL_USER..."
+echo " [8/12] Applying Nemo context menu settings..."
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+
+if gsettings list-schemas | grep -qx "org.nemo.preferences.menu-config"; then
+    NEMO_MENU_SCHEMA="org.nemo.preferences.menu-config"
+
+    # Match File Management Preferences > Context Menus > Selection.
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-open true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-open-in-new-tab true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-open-in-new-window true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-scripts false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-cut true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-copy true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-paste true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-duplicate false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-pin false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-favorite false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-make-link false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-rename true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-copy-to true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-move-to true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-open-in-terminal false
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-open-as-root true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-move-to-trash true
+    gsettings set "$NEMO_MENU_SCHEMA" selection-menu-properties true
+
+    nemo -q >/dev/null 2>&1 || true
+    echo "==> Nemo context menu settings applied."
+else
+    echo "==> Nemo context menu schema not found; skipping."
+fi
+
+# ==============================================================================
+# 9. ENABLE AUTOLOGIN FOR CURRENT USER
+# ==============================================================================
+echo ""
+echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+echo " [9/12] Enabling autologin for $REAL_USER..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Linux Mint uses LightDM as display manager
@@ -417,11 +457,11 @@ echo "==> Autologin enabled for: $REAL_USER"
 echo "    (Original config backed up to ${LIGHTDM_CONF}.bak)"
 
 # ==============================================================================
-# 9. DISABLE UNNECESSARY DEFAULT SERVICES
+# 10. DISABLE UNNECESSARY DEFAULT SERVICES
 # ==============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " [9/9] Disabling unnecessary services..."
+echo " [10/12] Disabling unnecessary services..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 disable_service_if_exists() {
@@ -468,11 +508,11 @@ echo ""
 echo "==> Services cleanup done."
 
 # ==============================================================================
-# 10. DISABLE SCREENSAVER LOCK (no password on wake)
+# 11. DISABLE SCREENSAVER LOCK (no password on wake)
 # ==============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " [10/11] Disabling screensaver lock..."
+echo " [11/12] Disabling screensaver lock..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # Disable the lock screen entirely — no password needed after screensaver/idle
@@ -489,11 +529,11 @@ gsettings set org.cinnamon.settings-daemon.plugins.power lock-on-suspend false
 echo "==> Screensaver lock disabled — no password needed on wake."
 
 # ==============================================================================
-# 11. ENABLE NUMLOCK ON BOOT
+# 12. ENABLE NUMLOCK ON BOOT
 # ==============================================================================
 echo ""
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-echo " [11/11] Enabling NumLock on boot..."
+echo " [12/12] Enabling NumLock on boot..."
 echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
 
 # 1. Tell LightDM to enable NumLock before login
@@ -545,6 +585,7 @@ echo "   Wine          : $(wine --version)"
 echo "   Teams         : Installed (Flatpak)"
 echo "   TeamViewer    : Installed"
 echo "   Cinnamon      : Settings + 1 desktop applied"
+echo "   Nemo menu     : Context menu settings applied"
 echo "   Autologin     : Enabled for $REAL_USER"
 echo "   Lock screen   : Disabled (no password on wake)"
 echo "   NumLock       : Enabled on boot"
