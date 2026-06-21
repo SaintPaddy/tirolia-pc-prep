@@ -305,7 +305,60 @@ else
 fi
 
 # ==============================================================================
-# 8. AUTOLOGIN
+# 8. NEMO CONTEXT MENU SETTINGS
+# ==============================================================================
+header "Checking Nemo context menu settings"
+
+if gsettings list-schemas | grep -qx "org.nemo.preferences.menu-config"; then
+    NEMO_MENU_SCHEMA="org.nemo.preferences.menu-config"
+    NEMO_CHANGED=0
+
+    check_nemo_menu_setting() {
+        local KEY="$1"
+        local EXPECTED="$2"
+        local LABEL="$3"
+        local ACTUAL
+
+        ACTUAL=$(gsettings get "$NEMO_MENU_SCHEMA" "$KEY" 2>/dev/null || echo "?")
+
+        if [ "$ACTUAL" = "$EXPECTED" ]; then
+            ok "$LABEL = $EXPECTED"
+        else
+            gsettings set "$NEMO_MENU_SCHEMA" "$KEY" "$EXPECTED" \
+              && fixed "$LABEL set to $EXPECTED (was: $ACTUAL)" \
+              || fail "Could not set $LABEL"
+            NEMO_CHANGED=1
+        fi
+    }
+
+    check_nemo_menu_setting selection-menu-open true "Open"
+    check_nemo_menu_setting selection-menu-open-in-new-tab true "Open in new tab"
+    check_nemo_menu_setting selection-menu-open-in-new-window true "Open in new window"
+    check_nemo_menu_setting selection-menu-scripts false "Scripts"
+    check_nemo_menu_setting selection-menu-cut true "Cut"
+    check_nemo_menu_setting selection-menu-copy true "Copy"
+    check_nemo_menu_setting selection-menu-paste true "Paste"
+    check_nemo_menu_setting selection-menu-duplicate false "Duplicate"
+    check_nemo_menu_setting selection-menu-pin false "Pin"
+    check_nemo_menu_setting selection-menu-favorite false "Favorite"
+    check_nemo_menu_setting selection-menu-make-link false "Create link"
+    check_nemo_menu_setting selection-menu-rename true "Rename"
+    check_nemo_menu_setting selection-menu-copy-to true "Copy to"
+    check_nemo_menu_setting selection-menu-move-to true "Move to"
+    check_nemo_menu_setting selection-menu-open-in-terminal false "Open in terminal"
+    check_nemo_menu_setting selection-menu-open-as-root true "Open as administrator"
+    check_nemo_menu_setting selection-menu-move-to-trash true "Move to trash"
+    check_nemo_menu_setting selection-menu-properties true "Properties"
+
+    if [ "$NEMO_CHANGED" -eq 1 ]; then
+        nemo -q >/dev/null 2>&1 || true
+    fi
+else
+    echo "  –  N/A      : Nemo context menu schema not found"
+fi
+
+# ==============================================================================
+# 9. AUTOLOGIN
 # ==============================================================================
 header "Checking autologin"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
@@ -334,7 +387,7 @@ EOF
 fi
 
 # ==============================================================================
-# 9. SERVICES
+# 10. SERVICES
 # ==============================================================================
 header "Checking services"
 
@@ -364,7 +417,7 @@ check_service_disabled apport.service         "crash report generator"
 check_service_disabled kerneloops.service     "kernel oops telemetry"
 
 # ==============================================================================
-# 10. SCREENSAVER LOCK
+# 11. SCREENSAVER LOCK
 # ==============================================================================
 header "Checking screensaver lock"
 LOCK=$(gsettings get org.cinnamon.desktop.screensaver lock-enabled 2>/dev/null || echo "?")
@@ -380,7 +433,7 @@ else
 fi
 
 # ==============================================================================
-# 11. NUMLOCK
+# 12. NUMLOCK
 # ==============================================================================
 header "Checking NumLock"
 
