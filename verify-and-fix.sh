@@ -265,11 +265,11 @@ HTTP_STATUS=$(curl -o /dev/null -s -w "%{http_code}" \
 if [ "$HTTP_STATUS" != "200" ]; then
     ok "No install-temp folder in repo yet — nothing to download"
 else
-    if [ -d "$DEST" ] && [ "$(ls -A "$DEST" 2>/dev/null)" ]; then
-        ok "install-temp folder exists at $DEST"
-        echo "       (Re-run with --force-download to re-download files)"
-    else
-        echo "  ⚠  install-temp missing or empty — downloading..."
+    echo "  install-temp destination: $DEST"
+    read -r -p "  Sync install-temp from GitHub now? [y/N] " SYNC_INSTALL_TEMP || SYNC_INSTALL_TEMP="N"
+
+    if [[ "$SYNC_INSTALL_TEMP" =~ ^[Yy]$ ]]; then
+        echo "  Syncing install-temp from GitHub..."
         mkdir -p "$DEST"
         curl -fsSL "https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/install-temp?ref=${GITHUB_BRANCH}" \
           | python3 -c "
@@ -287,7 +287,11 @@ def process(items, lp):
             with urllib.request.urlopen(item['url']) as r:
                 process(json.load(r), dest)
 process(items, '$DEST')
-" && fixed "install-temp downloaded to $DEST" || fail "install-temp download failed"
+" && fixed "install-temp synced to $DEST" || fail "install-temp sync failed"
+    elif [ -d "$DEST" ] && [ "$(ls -A "$DEST" 2>/dev/null)" ]; then
+        ok "install-temp sync skipped; existing folder kept at $DEST"
+    else
+        echo "  - SKIPPED : install-temp sync skipped by user"
     fi
 fi
 
@@ -362,8 +366,11 @@ fi
 # ==============================================================================
 header "Checking autologin"
 LIGHTDM_CONF="/etc/lightdm/lightdm.conf"
-if grep -q "^autologin-user=$REAL_USER" "$LIGHTDM_CONF" 2>/dev/null; then
-    ok "Autologin is enabled for $REAL_USER"
+AUTOLOGIN_USER=$(grep -E "^autologin-user[[:space:]]*=" "$LIGHTDM_CONF" 2>/dev/null | tail -n1 | cut -d= -f2- | xargs || true)
+AUTOLOGIN_TIMEOUT=$(grep -E "^autologin-user-timeout[[:space:]]*=" "$LIGHTDM_CONF" 2>/dev/null | tail -n1 | cut -d= -f2- | xargs || true)
+
+if [ "$AUTOLOGIN_USER" = "$REAL_USER" ] && [ "$AUTOLOGIN_TIMEOUT" = "0" ]; then
+    ok "Autologin is enabled for $REAL_USER with no delay"
 else
     echo "  ⚠  Autologin not set — configuring..."
     sudo cp "$LIGHTDM_CONF" "${LIGHTDM_CONF}.bak"
@@ -421,15 +428,16 @@ check_service_disabled kerneloops.service     "kernel oops telemetry"
 # ==============================================================================
 header "Checking screensaver lock"
 LOCK=$(gsettings get org.cinnamon.desktop.screensaver lock-enabled 2>/dev/null || echo "?")
-IDLE=$(gsettings get org.cinnamon.desktop.screensaver idle-activation-enabled 2>/dev/null || echo "?")
+IDLE_DIM=$(gsettings get org.cinnamon.settings-daemon.plugins.power idle-dim-time 2>/dev/null || echo "?")
+LOCK_ON_SUSPEND=$(gsettings get org.cinnamon.settings-daemon.plugins.power lock-on-suspend 2>/dev/null || echo "?")
 
-if [ "$LOCK" = "false" ] && [ "$IDLE" = "false" ]; then
-    ok "Screensaver lock is disabled"
+if [ "$LOCK" = "false" ] && [ "$IDLE_DIM" = "0" ] && [ "$LOCK_ON_SUSPEND" = "false" ]; then
+    ok "Screensaver lock settings match setup.sh"
 else
     gsettings set org.cinnamon.desktop.screensaver lock-enabled false
-    #gsettings set org.cinnamon.desktop.screensaver idle-activation-enabled false
+    gsettings set org.cinnamon.settings-daemon.plugins.power idle-dim-time 0 2>/dev/null || true
     gsettings set org.cinnamon.settings-daemon.plugins.power lock-on-suspend false 2>/dev/null || true
-    fixed "Screensaver lock disabled"
+    fixed "Screensaver lock settings matched to setup.sh"
 fi
 
 # ==============================================================================
