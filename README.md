@@ -10,7 +10,8 @@ One-command setup script for a fresh **Linux Mint** installation.
 | 2 | **Teams for Linux** | Community Flatpak by [IsmaelMartinez](https://github.com/IsmaelMartinez/teams-for-linux) |
 | 3 | **TeamViewer** | Latest `.deb` from TeamViewer directly |
 | 4 | **Cinnamon settings** | Start button label, filled-badge icon, ungrouped taskbar with app names |
-| 5 | **USB drive-letter tool** | Assigns persistent `D:`, `E:` etc. to USB disks for Wine/SAM Broadcaster |
+| 5 | **Nemo context menu** | Applies the preferred visible right-click menu items |
+| 6 | **USB drive-letter tool** | Assigns persistent `D:`, `E:` etc. to USB disks for Wine/SAM Broadcaster |
 
 ---
 
@@ -66,6 +67,13 @@ tirolia-pc-prep/
 | Menu label | `   Start      ` |
 | Group windows | Off |
 | Taskbar button label | Application name |
+
+## Nemo context menu settings applied
+
+The setup script matches **File Management Preferences > Context Menus > Selection** to the preferred layout:
+
+- Shown: Open, Open in new tab/window, Cut, Copy, Paste, Rename, Copy to, Move to, Open as administrator, Move to trash, Properties
+- Hidden: Scripts, Duplicate, Pin, Favorite, Create link, Open in terminal
 
 ---
 
